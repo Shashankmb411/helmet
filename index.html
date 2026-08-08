@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Safety Monitoring Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --bg-color: #FAF8F5;
+            --card-bg: #FFFFFF;
+            --primary-brown: #8C6D58;
+            --accent-brown: #D7C4B7;
+            --dark-brown: #4A3525;
+            --text-color: #2D241E;
+            --danger-red: #D9534F;
+            --shadow: 0 4px 15px rgba(74, 53, 37, 0.08);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* IP Setup Overlay Screen */
+        #ip-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(74, 53, 37, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            width: 320px;
+            box-shadow: var(--shadow);
+            border: 2px solid var(--accent-brown);
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+            color: var(--dark-brown);
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .input-group input {
+            width: 92%;
+            padding: 10px;
+            border: 1px solid var(--accent-brown);
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 25px;
+            background-color: var(--card-bg);
+            border-bottom: 3px solid var(--accent-brown);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            margin: 0;
+            color: var(--dark-brown);
+            font-size: 24px;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--accent-brown);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            color: var(--primary-brown);
+            font-size: 18px;
+            border-bottom: 2px solid var(--bg-color);
+            padding-bottom: 8px;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 240px;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .video-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .btn {
+            background-color: var(--primary-brown);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+            margin-top: 10px;
+            transition: background-color 0.2s;
+        }
+
+        .btn:hover {
+            background-color: var(--dark-brown);
+        }
+
+        .btn-sos {
+            background-color: var(--danger-red);
+            font-size: 18px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .sensor-box {
+            background-color: var(--bg-color);
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .sensor-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--dark-brown);
+        }
+
+        .coords-box {
+            background-color: var(--bg-color);
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            color: var(--dark-brown);
+            display: flex;
+            justify-content: space-around;
+        }
+
+        #map {
+            height: 250px;
+            width: 100%;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        #chart-section {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .chart-box {
+            background-color: var(--card-bg);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid var(--accent-brown);
+            height: 200px;
+        }
+
+        .chart-box h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: var(--dark-brown);
+        }
+
+        .canvas-container {
+            position: relative;
+            height: 150px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ip-modal">
+        <div class="modal-content">
+            <h2>Device Connection</h2>
+            <div class="input-group">
+                <label for="input-cam-ip">ESP32-CAM IP Address</label>
+                <input type="text" id="input-cam-ip" placeholder="e.g. 192.168.1.100">
+            </div>
+            <div class="input-group">
+                <label for="input-main-ip">ESP32 Main IP Address</label>
+                <input type="text" id="input-main-ip" placeholder="e.g. 192.168.1.101">
+            </div>
+            <button class="btn" onclick="saveIPsAndStart()">Connect Dashboard</button>
+        </div>
+    </div>
+
+    <div class="header">
+        <h1>Safety Monitoring Hub</h1>
+        <button class="btn" style="width: auto; margin-top: 0;" onclick="showIPModal()">Change IPs</button>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>Live Camera Stream & GPS Location</h2>
+            <div class="video-container">
+                <img id="cam-stream" src="" alt="Camera Stream Paused / Offline">
+            </div>
+            
+            <div class="coords-box">
+                <div>Lat: <span id="val-lat">0.000000</span></div>
+                <div>Lng: <span id="val-lng">0.000000</span></div>
+            </div>
+
+            <button class="btn" onclick="toggleMap()">Toggle GPS Location Map</button>
+            <div id="map"></div>
+        </div>
+
+        <div class="card">
+            <h2>Environmental Sensors</h2>
+            <div class="sensor-grid">
+                <div class="sensor-box">
+                    <div>Methane (CH₄)</div>
+                    <div class="sensor-value" id="val-ch4">0 PPM</div>
+                </div>
+                <div class="sensor-box">
+                    <div>Carbon Monoxide</div>
+                    <div class="sensor-value" id="val-co">0 PPM</div>
+                </div>
+                <div class="sensor-box">
+                    <div>Temperature</div>
+                    <div class="sensor-value" id="val-temp">0 °C</div>
+                </div>
+                <div class="sensor-box">
+                    <div>Humidity</div>
+                    <div class="sensor-value" id="val-hum">0 %</div>
+                </div>
+                <div class="sensor-box">
+                    <div>Motion</div>
+                    <div class="sensor-value" id="val-motion">CLEAR</div>
+                </div>
+                <div class="sensor-box">
+                    <div>Camera Fire Check</div>
+                    <div class="sensor-value" id="val-fire">CLEAR</div>
+                </div>
+            </div>
+            <button class="btn btn-sos" onclick="triggerSOS()">EMERGENCY SOS</button>
+        </div>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <button class="btn" style="width: auto; padding: 12px 30px;" onclick="toggleGraphs()">Show / Hide Analytics Graphs</button>
+    </div>
+
+    <div class="card" id="chart-section">
+        <h2>Component-Wise Real-Time Analytics</h2>
+        <div class="charts-grid">
+            <div class="chart-box">
+                <h3>Temperature (°C)</h3>
+                <div class="canvas-container"><canvas id="chartTemp"></canvas></div>
+            </div>
+            <div class="chart-box">
+                <h3>Humidity (%)</h3>
+                <div class="canvas-container"><canvas id="chartHum"></canvas></div>
+            </div>
+            <div class="chart-box">
+                <h3>Methane (CH₄ PPM)</h3>
+                <div class="canvas-container"><canvas id="chartCH4"></canvas></div>
+            </div>
+            <div class="chart-box">
+                <h3>Carbon Monoxide (CO PPM)</h3>
+                <div class="canvas-container"><canvas id="chartCO"></canvas></div>
+            </div>
+            <div class="chart-box">
+                <h3>Motion Triggered (1 / 0)</h3>
+                <div class="canvas-container"><canvas id="chartMotion"></canvas></div>
+            </div>
+            <div class="chart-box">
+                <h3>Camera Fire Detection (1 / 0)</h3>
+                <div class="canvas-container"><canvas id="chartFire"></canvas></div>
+            </div>
+            <div class="chart-box">
+                <h3>GPS Latitude</h3>
+                <div class="canvas-container"><canvas id="chartLat"></canvas></div>
+            </div>
+            <div class="chart-box">
+                <h3>GPS Longitude</h3>
+                <div class="canvas-container"><canvas id="chartLng"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ESP32_CAM_IP = localStorage.getItem('ESP32_CAM_IP') || '';
+        let ESP32_MAIN_IP = localStorage.getItem('ESP32_MAIN_IP') || '';
+        let currentLat = 0, currentLng = 0;
+
+        window.onload = function() {
+            if (!ESP32_CAM_IP || !ESP32_MAIN_IP) {
+                showIPModal();
+            } else {
+                document.getElementById('ip-modal').style.display = 'none';
+                initStream();
+            }
+        };
+
+        function showIPModal() {
+            document.getElementById('input-cam-ip').value = ESP32_CAM_IP;
+            document.getElementById('input-main-ip').value = ESP32_MAIN_IP;
+            document.getElementById('ip-modal').style.display = 'flex';
+        }
+
+        function saveIPsAndStart() {
+            ESP32_CAM_IP = document.getElementById('input-cam-ip').value.trim();
+            ESP32_MAIN_IP = document.getElementById('input-main-ip').value.trim();
+
+            if (!ESP32_CAM_IP || !ESP32_MAIN_IP) {
+                alert("Please enter valid IP addresses for both devices.");
+                return;
+            }
+
+            localStorage.setItem('ESP32_CAM_IP', ESP32_CAM_IP);
+            localStorage.setItem('ESP32_MAIN_IP', ESP32_MAIN_IP);
+
+            document.getElementById('ip-modal').style.display = 'none';
+            initStream();
+        }
+
+        function initStream() {
+            document.getElementById('cam-stream').src = `http://${ESP32_CAM_IP}:81/stream`;
+        }
+
+        if ("Notification" in window) {
+            Notification.requestPermission();
+        }
+
+        function sendNotification(title, body) {
+            if (Notification.permission === "granted") {
+                new Notification(title, { body: body, icon: '' });
+            }
+        }
+
+        // Leaflet Map Init
+        let map, marker;
+        function initMap(lat, lng) {
+            if (!map) {
+                map = L.map('map').setView([lat, lng], 15);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                marker = L.marker([lat, lng]).addTo(map);
+            } else {
+                marker.setLatLng([lat, lng]);
+                map.setView([lat, lng]);
+            }
+        }
+
+        function toggleMap() {
+            const mapEl = document.getElementById('map');
+            if (mapEl.style.display === 'block') {
+                mapEl.style.display = 'none';
+            } else {
+                mapEl.style.display = 'block';
+                fetchGPS();
+            }
+        }
+
+        function fetchGPS() {
+            if (!ESP32_CAM_IP) return;
+            fetch(`http://${ESP32_CAM_IP}/gps`)
+                .then(res => res.json())
+                .then(data => {
+                    currentLat = data.lat;
+                    currentLng = data.lng;
+                    document.getElementById('val-lat').innerText = currentLat.toFixed(6);
+                    document.getElementById('val-lng').innerText = currentLng.toFixed(6);
+                    initMap(currentLat, currentLng);
+                }).catch(err => console.log("GPS fetch error: ", err));
+        }
+
+        // Chart Builder Helper
+        function buildSingleChart(elementId, labelText, lineColor) {
+            const ctx = document.getElementById(elementId).getContext('2d');
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: labelText,
+                        borderColor: lineColor,
+                        backgroundColor: lineColor,
+                        data: [],
+                        fill: false,
+                        tension: 0.2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // Initialize 8 Charts
+        const charts = {
+            temp: buildSingleChart('chartTemp', 'Temp (°C)', '#8C6D58'),
+            hum: buildSingleChart('chartHum', 'Humidity (%)', '#2A9D8F'),
+            ch4: buildSingleChart('chartCH4', 'Methane (PPM)', '#4A3525'),
+            co: buildSingleChart('chartCO', 'CO (PPM)', '#E76F51'),
+            motion: buildSingleChart('chartMotion', 'Motion (1/0)', '#E9C46A'),
+            fire: buildSingleChart('chartFire', 'Fire (1/0)', '#D9534F'),
+            lat: buildSingleChart('chartLat', 'Latitude', '#264653'),
+            lng: buildSingleChart('chartLng', 'Longitude', '#2A9D8F')
+        };
+
+        function pushPoint(chartInstance, timeLabel, val) {
+            if (chartInstance.data.labels.length > 10) {
+                chartInstance.data.labels.shift();
+                chartInstance.data.datasets[0].data.shift();
+            }
+            chartInstance.data.labels.push(timeLabel);
+            chartInstance.data.datasets[0].data.push(val);
+            chartInstance.update();
+        }
+
+        function toggleGraphs() {
+            const section = document.getElementById('chart-section');
+            if (section.style.display === 'block') {
+                section.style.display = 'none';
+            } else {
+                section.style.display = 'block';
+                // Resize charts so they fit correctly after display:none
+                Object.values(charts).forEach(chart => chart.resize());
+            }
+        }
+
+        function triggerSOS() {
+            if (!ESP32_MAIN_IP) return;
+            fetch(`http://${ESP32_MAIN_IP}/sos`, { method: 'POST' });
+            sendNotification("EMERGENCY ALERT", "SOS Button pressed on user dashboard!");
+            alert("SOS Signal Sent!");
+        }
+
+        // 15-Second Telemetry Interval
+        setInterval(() => {
+            if (!ESP32_MAIN_IP || !ESP32_CAM_IP) return;
+
+            let time = new Date().toLocaleTimeString();
+
+            fetchGPS();
+
+            fetch(`http://${ESP32_MAIN_IP}/sensors`)
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('val-ch4').innerText = data.ch4 + " PPM";
+                    document.getElementById('val-co').innerText = data.co + " PPM";
+                    document.getElementById('val-temp').innerText = data.temp + " °C";
+                    document.getElementById('val-hum').innerText = data.humidity + " %";
+
+                    pushPoint(charts.temp, time, data.temp);
+                    pushPoint(charts.hum, time, data.humidity);
+                    pushPoint(charts.ch4, time, data.ch4);
+                    pushPoint(charts.co, time, data.co);
+
+                    if (data.danger) sendNotification("HAZARD WARNING", "Gas or heat threshold exceeded!");
+
+                    return fetch(`http://${ESP32_CAM_IP}/status`);
+                })
+                .then(res => res.json())
+                .then(camData => {
+                    let mVal = camData.motion ? 1 : 0;
+                    let fVal = camData.fire ? 1 : 0;
+
+                    document.getElementById('val-motion').innerText = camData.motion ? "DETECTED" : "CLEAR";
+                    document.getElementById('val-fire').innerText = camData.fire ? "FIRE DETECTED" : "CLEAR";
+
+                    pushPoint(charts.motion, time, mVal);
+                    pushPoint(charts.fire, time, fVal);
+                    pushPoint(charts.lat, time, currentLat);
+                    pushPoint(charts.lng, time, currentLng);
+
+                    if (camData.fire) sendNotification("CRITICAL ALERT", "Fire detected by camera!");
+                    if (camData.motion) sendNotification("SECURITY ALERT", "Motion detected!");
+                })
+                .catch(err => console.log("Polling error:", err));
+        }, 15000);
+    </script>
+</body>
+</html>
