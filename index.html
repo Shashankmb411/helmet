@@ -226,9 +226,9 @@
                         <span><i class="fa-solid fa-location-dot"></i> GPS Tracker</span>
                     </div>
                     <div style="font-size: 0.9rem; line-height: 1.8;">
-                        <p><strong>Latitude:</strong> <span id="gps-lat">0.000000</span></p>
-                        <p><strong>Longitude:</strong> <span id="gps-lng">0.000000</span></p>
-                        <p><strong>Fix Status:</strong> <span id="gps-fix" style="color: var(--warning-amber);">Acquiring...</span></p>
+                        <p><strong>Latitude:</strong> <span id="gps-lat">12.927037</span></p>
+                        <p><strong>Longitude:</strong> <span id="gps-lng">77.526597</span></p>
+                        <p><strong>Fix Status:</strong> <span id="gps-fix" style="color: var(--warning-amber);">Acquiring... (GAT Default)</span></p>
                     </div>
                     <button class="btn-map" onclick="openGoogleMaps()">
                         <i class="fa-solid fa-map-location-dot"></i> Show Location on Google Maps
@@ -273,8 +273,12 @@
     </div>
 
     <script>
-        let currentLat = 0.0;
-        let currentLng = 0.0;
+        // Exact Default coordinates for Global Academy of Technology campus
+        const DEFAULT_LAT = 12.927037;
+        const DEFAULT_LNG = 77.526597;
+
+        let currentLat = DEFAULT_LAT;
+        let currentLng = DEFAULT_LNG;
         let camIP = "192.168.163.138";
         let mainIP = "192.168.163.181";
 
@@ -347,7 +351,6 @@
             placeholder.style.display = 'none';
             img.style.display = 'block';
             
-            // Handle both standard stream URL and camera stream port
             img.src = camIP.includes(':') ? `http://${camIP}/stream` : `http://${camIP}:81/stream`;
 
             logEvent(`Targeting CAM (${camIP}) & Main ESP (${mainIP})`);
@@ -364,7 +367,7 @@
                     document.getElementById("cam-status-dot").classList.remove("offline");
                     document.getElementById("cam-status-text").innerText = "Online";
 
-                    if (data.gps_valid) {
+                    if (data.gps_valid && data.latitude !== undefined && data.longitude !== undefined) {
                         currentLat = data.latitude;
                         currentLng = data.longitude;
                         document.getElementById("gps-lat").innerText = currentLat.toFixed(6);
@@ -372,7 +375,11 @@
                         document.getElementById("gps-fix").innerText = "Locked";
                         document.getElementById("gps-fix").style.color = "var(--success-green)";
                     } else {
-                        document.getElementById("gps-fix").innerText = "Acquiring Satellites...";
+                        currentLat = DEFAULT_LAT;
+                        currentLng = DEFAULT_LNG;
+                        document.getElementById("gps-lat").innerText = `${DEFAULT_LAT.toFixed(6)} (Default)`;
+                        document.getElementById("gps-lng").innerText = `${DEFAULT_LNG.toFixed(6)} (Default)`;
+                        document.getElementById("gps-fix").innerText = "Acquiring Satellites... (GAT Default)";
                         document.getElementById("gps-fix").style.color = "var(--warning-amber)";
                     }
 
@@ -403,7 +410,6 @@
 
         async function pollMainESP() {
             try {
-                // Try sensor-data endpoint first, fallback to /data
                 let response = await fetch(`http://${mainIP}/sensor-data`).catch(() => fetch(`http://${mainIP}/data`));
                 if (response && response.ok) {
                     const data = await response.json();
@@ -474,11 +480,7 @@
         }
 
         function openGoogleMaps() {
-            if (currentLat === 0 && currentLng === 0) {
-                alert("GPS coordinates not acquired yet.");
-            } else {
-                window.open(`https://www.google.com/maps?q=${currentLat},${currentLng}`, "_blank");
-            }
+            window.open(`https://www.google.com/maps?q=${currentLat},${currentLng}`, "_blank");
         }
     </script>
 </body>
