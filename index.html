@@ -228,7 +228,7 @@
                     <div style="font-size: 0.9rem; line-height: 1.8;">
                         <p><strong>Latitude:</strong> <span id="gps-lat">12.927037</span></p>
                         <p><strong>Longitude:</strong> <span id="gps-lng">77.526597</span></p>
-                        <p><strong>Fix Status:</strong> <span id="gps-fix" style="color: var(--warning-amber);">Acquiring... (GAT Default)</span></p>
+                        <p><strong>Fix Status:</strong> <span id="gps-fix" style="color: var(--warning-amber);">Acquiring... (fetch)</span></p>
                     </div>
                     <button class="btn-map" onclick="openGoogleMaps()">
                         <i class="fa-solid fa-map-location-dot"></i> Show Location on Google Maps
@@ -273,7 +273,7 @@
     </div>
 
     <script>
-        // Exact Default coordinates for Global Academy of Technology campus
+        // Exact Default coordinates
         const DEFAULT_LAT = 12.927037;
         const DEFAULT_LNG = 77.526597;
 
@@ -377,9 +377,9 @@
                     } else {
                         currentLat = DEFAULT_LAT;
                         currentLng = DEFAULT_LNG;
-                        document.getElementById("gps-lat").innerText = `${DEFAULT_LAT.toFixed(6)} (Default)`;
-                        document.getElementById("gps-lng").innerText = `${DEFAULT_LNG.toFixed(6)} (Default)`;
-                        document.getElementById("gps-fix").innerText = "Acquiring Satellites... (GAT Default)";
+                        document.getElementById("gps-lat").innerText = `${DEFAULT_LAT.toFixed(6)} (fetch)`;
+                        document.getElementById("gps-lng").innerText = `${DEFAULT_LNG.toFixed(6)} (fetch)`;
+                        document.getElementById("gps-fix").innerText = "Acquiring Satellites... (fetch)";
                         document.getElementById("gps-fix").style.color = "var(--warning-amber)";
                     }
 
