@@ -67,7 +67,7 @@
 
         .config-group { display: flex; align-items: center; gap: 10px; }
         .config-group label { font-size: 0.88rem; font-weight: 600; color: var(--accent-brown); }
-        .config-group input { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; width: 160px; outline: none; background-color: #FAF8F5; }
+        .config-group input { padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; width: 180px; outline: none; background-color: #FAF8F5; }
 
         .btn-connect {
             background-color: var(--accent-brown);
@@ -77,6 +77,7 @@
             border-radius: 6px;
             cursor: pointer;
             font-weight: 600;
+            transition: background 0.2s;
         }
 
         .btn-connect:hover { background-color: var(--primary-espresso); }
@@ -171,7 +172,7 @@
                         <img id="video-stream" src="" alt="Camera Stream Disconnected" style="display:none;">
                         <div id="stream-placeholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #E2D7CB;">
                             <i class="fa-solid fa-video-slash fa-2xl" style="margin-bottom: 15px;"></i>
-                            <p>Enter ESP32-CAM IP and click "Connect & Sync"</p>
+                            <p>Enter ESP32 IPs and click "Connect & Sync"</p>
                         </div>
                         <div class="stream-overlay">
                             <span class="overlay-badge" id="motion-badge"><i class="fa-solid fa-person-walking"></i> Motion: Clear</span>
@@ -182,7 +183,7 @@
 
                 <div class="card">
                     <div class="card-title">
-                        <span><i class="fa-solid fa-gauge-high"></i> Environmental Metrics (Updates Every 10s)</span>
+                        <span><i class="fa-solid fa-gauge-high"></i> Environmental Metrics</span>
                     </div>
                     <div class="sensor-grid">
                         <div class="sensor-card">
@@ -193,7 +194,7 @@
                         <div class="sensor-card">
                             <i class="fa-solid fa-skull-crossbones"></i>
                             <div class="val" id="val-co">0 <small style="font-size:0.9rem">PPM</small></div>
-                            <div class="lbl">Carbon Monoxide (CO)</div>
+                            <div class="lbl">Combustible Gas / CO</div>
                         </div>
                         <div class="sensor-card">
                             <i class="fa-solid fa-temperature-half"></i>
@@ -222,7 +223,7 @@
 
                 <div class="card">
                     <div class="card-title">
-                        <span><i class="fa-solid fa-location-dot"></i> GPS Tracker (10s Update)</span>
+                        <span><i class="fa-solid fa-location-dot"></i> GPS Tracker</span>
                     </div>
                     <div style="font-size: 0.9rem; line-height: 1.8;">
                         <p><strong>Latitude:</strong> <span id="gps-lat">0.000000</span></p>
@@ -255,7 +256,7 @@
                     <div class="chart-container"><canvas id="methaneChart"></canvas></div>
                 </div>
                 <div>
-                    <h4 style="font-size:0.88rem; color:var(--accent-brown); margin-bottom:8px;">Carbon Monoxide (CO PPM)</h4>
+                    <h4 style="font-size:0.88rem; color:var(--accent-brown); margin-bottom:8px;">Combustible Gas / CO (PPM)</h4>
                     <div class="chart-container"><canvas id="coChart"></canvas></div>
                 </div>
                 <div>
@@ -276,6 +277,14 @@
         let currentLng = 0.0;
         let camIP = "192.168.163.138";
         let mainIP = "192.168.163.181";
+
+        let motionCount = 0;
+        let fireCount = 0;
+        let sosCount = 0;
+
+        function sanitizeHost(input) {
+            return input.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+        }
 
         function logEvent(msg, isAlert = false) {
             const consoleBox = document.getElementById("log-console");
@@ -302,7 +311,7 @@
             type: 'line',
             data: {
                 labels: [...timeLabels],
-                datasets: [{ label: 'CO (PPM)', data: Array(10).fill(0), borderColor: '#D9381E', backgroundColor: 'rgba(217, 56, 30, 0.1)', fill: true }]
+                datasets: [{ label: 'CO / Gas (PPM)', data: Array(10).fill(0), borderColor: '#D9381E', backgroundColor: 'rgba(217, 56, 30, 0.1)', fill: true }]
             },
             options: { responsive: true, maintainAspectRatio: false }
         });
@@ -329,26 +338,27 @@
         });
 
         function connectDevices() {
-            camIP = document.getElementById("cam-ip").value.trim();
-            mainIP = document.getElementById("main-ip").value.trim();
+            camIP = sanitizeHost(document.getElementById("cam-ip").value);
+            mainIP = sanitizeHost(document.getElementById("main-ip").value);
 
             const img = document.getElementById("video-stream");
             const placeholder = document.getElementById("stream-placeholder");
 
             placeholder.style.display = 'none';
             img.style.display = 'block';
-            img.src = `http://${camIP}:81/stream`;
+            
+            // Handle both standard stream URL and camera stream port
+            img.src = camIP.includes(':') ? `http://${camIP}/stream` : `http://${camIP}:81/stream`;
 
-            logEvent(`Connected to CAM (${camIP}) & Main ESP (${mainIP})`);
+            logEvent(`Targeting CAM (${camIP}) & Main ESP (${mainIP})`);
 
             pollCAM();
             pollMainESP();
         }
 
-        // Poll GPS and Camera status every 10 seconds (10,000 ms)
         async function pollCAM() {
             try {
-                const response = await fetch(`http://${camIP}/data`, { timeout: 4000 });
+                const response = await fetch(`http://${camIP}/data`);
                 if (response.ok) {
                     const data = await response.json();
                     document.getElementById("cam-status-dot").classList.remove("offline");
@@ -367,48 +377,56 @@
                     }
 
                     const motionBadge = document.getElementById("motion-badge");
+                    if (data.motion) motionCount++;
                     motionBadge.innerHTML = data.motion 
                         ? `<i class="fa-solid fa-person-walking"></i> MOTION DETECTED!` 
                         : `<i class="fa-solid fa-person-walking"></i> Motion: Clear`;
                     motionBadge.style.background = data.motion ? "var(--danger-red)" : "rgba(61, 35, 20, 0.75)";
 
                     const fireBadge = document.getElementById("fire-badge");
+                    if (data.fire) fireCount++;
                     fireBadge.innerHTML = data.fire 
                         ? `<i class="fa-solid fa-fire"></i> FIRE DETECTED!` 
                         : `<i class="fa-solid fa-fire"></i> Fire: Safe`;
                     fireBadge.style.background = data.fire ? "var(--danger-red)" : "rgba(61, 35, 20, 0.75)";
+
+                    detectionChart.data.datasets[0].data[0] = motionCount;
+                    detectionChart.data.datasets[0].data[1] = fireCount;
+                    detectionChart.update();
                 }
             } catch (e) {
                 document.getElementById("cam-status-dot").classList.add("offline");
                 document.getElementById("cam-status-text").innerText = "Offline";
             }
-            setTimeout(pollCAM, 10000); 
+            setTimeout(pollCAM, 3000);
         }
 
-        // Poll Main ESP Sensors every 10 seconds (10,000 ms)
         async function pollMainESP() {
             try {
-                const response = await fetch(`http://${mainIP}/sensor-data`, { timeout: 4000 });
-                if (response.ok) {
+                // Try sensor-data endpoint first, fallback to /data
+                let response = await fetch(`http://${mainIP}/sensor-data`).catch(() => fetch(`http://${mainIP}/data`));
+                if (response && response.ok) {
                     const data = await response.json();
                     document.getElementById("main-status-dot").classList.remove("offline");
                     document.getElementById("main-status-text").innerText = "Online";
 
-                    document.getElementById("val-methane").innerText = data.methane;
-                    document.getElementById("val-co").innerText = data.co;
-                    document.getElementById("val-temp").innerText = data.temperature;
-                    document.getElementById("val-humidity").innerText = data.humidity;
+                    const coVal = data.co !== undefined ? data.co : (data.smoke !== undefined ? data.smoke : 0);
+                    
+                    document.getElementById("val-methane").innerText = data.methane || 0;
+                    document.getElementById("val-co").innerText = coVal;
+                    document.getElementById("val-temp").innerText = data.temperature || 0;
+                    document.getElementById("val-humidity").innerText = data.humidity || 0;
 
                     const nowStr = new Date().toLocaleTimeString().split(' ')[0];
-                    pushChartData(methaneChart, nowStr, data.methane);
-                    pushChartData(coChart, nowStr, data.co);
+                    pushChartData(methaneChart, nowStr, data.methane || 0);
+                    pushChartData(coChart, nowStr, coVal);
                     
                     tempHumChart.data.labels.shift();
                     tempHumChart.data.labels.push(nowStr);
                     tempHumChart.data.datasets[0].data.shift();
-                    tempHumChart.data.datasets[0].data.push(data.temperature);
+                    tempHumChart.data.datasets[0].data.push(data.temperature || 0);
                     tempHumChart.data.datasets[1].data.shift();
-                    tempHumChart.data.datasets[1].data.push(data.humidity);
+                    tempHumChart.data.datasets[1].data.push(data.humidity || 0);
                     tempHumChart.update();
 
                     if (data.danger_alert) {
@@ -417,6 +435,9 @@
                     }
 
                     if (data.sos_triggered) {
+                        sosCount++;
+                        detectionChart.data.datasets[0].data[2] = sosCount;
+                        detectionChart.update();
                         showGlobalBanner("SOS PANIC BUTTON ACTIVATED!");
                         logEvent("EMERGENCY: SOS Button pressed!", true);
                     }
@@ -425,7 +446,7 @@
                 document.getElementById("main-status-dot").classList.add("offline");
                 document.getElementById("main-status-text").innerText = "Offline";
             }
-            setTimeout(pollMainESP, 10000);
+            setTimeout(pollMainESP, 3000);
         }
 
         function pushChartData(chart, label, value) {
@@ -438,7 +459,10 @@
 
         function triggerSOS() {
             fetch(`http://${mainIP}/trigger-sos`, { method: 'POST' }).catch(() => {});
-            showGlobalBanner("MANUAL SOS TRIGGERED! BUZZER ACTIVE FOR 10 SECONDS.");
+            sosCount++;
+            detectionChart.data.datasets[0].data[2] = sosCount;
+            detectionChart.update();
+            showGlobalBanner("MANUAL SOS TRIGGERED! BUZZER ACTIVE.");
             logEvent("Manual SOS Triggered via Dashboard UI", true);
         }
 
@@ -453,7 +477,7 @@
             if (currentLat === 0 && currentLng === 0) {
                 alert("GPS coordinates not acquired yet.");
             } else {
-                window.open(`https://maps.google.com/?q=${currentLat},${currentLng}`, "_blank");
+                window.open(`https://www.google.com/maps?q=${currentLat},${currentLng}`, "_blank");
             }
         }
     </script>
