@@ -20,6 +20,7 @@
             --danger-red: #D9381E;
             --warning-amber: #E67E22;
             --success-green: #27AE60;
+            --info-blue: #2980B9;
             --shadow: 0 4px 15px rgba(61, 35, 20, 0.06);
         }
 
@@ -104,7 +105,7 @@
         .card { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 22px; box-shadow: var(--shadow); }
         .card-title { font-size: 1.05rem; font-weight: 700; color: var(--primary-espresso); margin-bottom: 18px; display: flex; justify-content: space-between; border-bottom: 2px solid var(--light-tan); padding-bottom: 10px; }
 
-        .video-container { position: relative; width: 100%; height: 400px; background-color: #1E120B; border-radius: 8px; overflow: hidden; }
+        .video-container { position: relative; width: 100%; height: 380px; background-color: #1E120B; border-radius: 8px; overflow: hidden; }
         .video-container img { width: 100%; height: 100%; object-fit: contain; }
 
         .stream-overlay { position: absolute; top: 12px; left: 12px; display: flex; gap: 10px; z-index: 10; }
@@ -127,9 +128,90 @@
         .log-entry { margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .log-time { color: #E2B184; }
         .log-alert { color: #FF6B6B; font-weight: bold; }
+
+        /* ===== NOTIFICATION TOAST STYLES ===== */
+        #toast-container {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 360px;
+            width: calc(100% - 40px);
+            pointer-events: none;
+        }
+        .app-toast {
+            background: var(--bg-card);
+            border-left: 5px solid var(--accent-brown);
+            border-radius: 10px;
+            padding: 14px 18px;
+            box-shadow: 0 8px 25px rgba(61, 35, 20, 0.15);
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            animation: slideInRight 0.4s ease, fadeOut 0.5s ease 4.5s forwards;
+            pointer-events: auto;
+            backdrop-filter: blur(10px);
+        }
+        .app-toast.danger { border-left-color: var(--danger-red); }
+        .app-toast.warning { border-left-color: var(--warning-amber); }
+        .app-toast.success { border-left-color: var(--success-green); }
+        .app-toast.info { border-left-color: var(--info-blue); }
+
+        .app-toast i { font-size: 1.3rem; margin-top: 2px; }
+        .app-toast.danger i { color: var(--danger-red); }
+        .app-toast.warning i { color: var(--warning-amber); }
+        .app-toast.success i { color: var(--success-green); }
+        .app-toast.info i { color: var(--info-blue); }
+
+        .app-toast .toast-body { flex: 1; }
+        .app-toast .toast-title { font-weight: 700; font-size: 0.95rem; color: var(--primary-espresso); margin-bottom: 3px; }
+        .app-toast .toast-msg { font-size: 0.82rem; color: var(--text-muted); line-height: 1.4; }
+        .app-toast .toast-close {
+            background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; padding: 0 4px;
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(120%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            to { opacity: 0; transform: translateX(120%); }
+        }
+
+        /* Notification permission banner */
+        .perm-banner {
+            display: none;
+            background: linear-gradient(135deg, #E2B184 0%, #7A4B29 100%);
+            color: #FFF;
+            padding: 12px 20px;
+            border-radius: 10px;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            margin-bottom: 15px;
+            box-shadow: var(--shadow);
+        }
+        .perm-banner.active { display: flex; }
+        .perm-banner button {
+            background: #FFF;
+            color: var(--primary-espresso);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
     </style>
+<base target="_blank">
 </head>
 <body>
+
+    <!-- In-App Toast Container -->
+    <div id="toast-container"></div>
 
     <header>
         <h1><i class="fa-solid fa-shield-halved"></i> ESP32 Safety & Surveillance System</h1>
@@ -150,7 +232,16 @@
     </header>
 
     <div class="container">
-        
+
+        <!-- Notification Permission Banner -->
+        <div id="perm-banner" class="perm-banner">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <i class="fa-solid fa-bell fa-lg"></i>
+                <span>Enable push notifications to get alerts even when the app is in background.</span>
+            </div>
+            <button onclick="requestNotifyPermission()">Enable Alerts</button>
+        </div>
+
         <div class="connection-bar">
             <div class="connection-info">
                 <i class="fa-solid fa-cloud"></i>
@@ -174,11 +265,10 @@
 
         <div class="dashboard-grid">
             <div style="display: flex; flex-direction: column; gap: 25px;">
-                
+
                 <div class="card">
                     <div class="card-title">
                         <span><i class="fa-solid fa-camera"></i> Live Surveillance Feed (ESP32-CAM)</span>
-                        <span style="font-size:0.8rem; color:var(--text-muted);" id="fps-counter">0 FPS</span>
                     </div>
                     <div class="video-container">
                         <img id="video-stream" src="" alt="Waiting for camera feed..." style="display:none;">
@@ -315,12 +405,15 @@
         let camLastSeen = 0;
         let mainLastSeen = 0;
         let frameCount = 0;
-        let lastFrameTime = 0;
-        let fps = 0;
+        let notifyPermission = 'default';
+        let lastCamStatus = null;
+        let lastMainStatus = null;
+        let lastMqttStatus = null;
+        let gpsWasLocked = false;
 
         // ============== CHARTS ==============
         const timeLabels = Array(10).fill('');
-        
+
         const methaneChart = new Chart(document.getElementById('methaneChart').getContext('2d'), {
             type: 'line',
             data: {
@@ -360,6 +453,111 @@
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
         });
 
+        // ============== NOTIFICATION SYSTEM ==============
+
+        /**
+         * Universal notification helper.
+         * Tries multiple methods in order:
+         * 1. Native JS Bridge (Android.showNotification, app.showNotification, etc.)
+         * 2. Web Notification API (new Notification)
+         * 3. Vibration API
+         * 4. In-app toast (always shown as fallback)
+         */
+        function appNotify(title, message, type = 'info') {
+            const typeConfig = {
+                danger:  { icon: 'fa-triangle-exclamation', vibrate: [300, 100, 300, 100, 500] },
+                warning: { icon: 'fa-circle-exclamation',   vibrate: [200, 100, 200] },
+                success: { icon: 'fa-circle-check',         vibrate: [100] },
+                info:    { icon: 'fa-circle-info',          vibrate: [50] }
+            };
+            const cfg = typeConfig[type] || typeConfig.info;
+
+            // 1. Try native Android JS bridges (common names used by web-to-app converters)
+            try {
+                if (window.Android && typeof window.Android.showNotification === 'function') {
+                    window.Android.showNotification(title, message);
+                } else if (window.Android && typeof window.Android.showToast === 'function') {
+                    window.Android.showToast(title + ': ' + message);
+                } else if (window.app && typeof window.app.showNotification === 'function') {
+                    window.app.showNotification(title, message);
+                } else if (window.app && typeof window.app.showToast === 'function') {
+                    window.app.showToast(title + ': ' + message);
+                } else if (window.webintoapp && typeof window.webintoapp.notify === 'function') {
+                    window.webintoapp.notify(title, message);
+                } else if (window.WebViewApp && typeof window.WebViewApp.notify === 'function') {
+                    window.WebViewApp.notify(title, message);
+                } else if (window.native && typeof window.native.showNotification === 'function') {
+                    window.native.showNotification(title, message);
+                }
+            } catch (e) {
+                console.log('Native bridge error:', e);
+            }
+
+            // 2. Try standard Web Notification API
+            try {
+                if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                    new Notification(title, {
+                        body: message,
+                        icon: 'https://cdn-icons-png.flaticon.com/512/2964/2964514.png',
+                        requireInteraction: type === 'danger',
+                        tag: type + '-' + Date.now()
+                    });
+                }
+            } catch (e) {
+                console.log('Web notification error:', e);
+            }
+
+            // 3. Vibration feedback
+            try {
+                if (navigator.vibrate && cfg.vibrate) {
+                    navigator.vibrate(cfg.vibrate);
+                }
+            } catch (e) { /* ignore */ }
+
+            // 4. In-app toast (always shown)
+            showInAppToast(title, message, type, cfg.icon);
+        }
+
+        function showInAppToast(title, message, type, iconClass) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'app-toast ' + type;
+            toast.innerHTML = `
+                <i class="fa-solid ${iconClass}"></i>
+                <div class="toast-body">
+                    <div class="toast-title">${escapeHtml(title)}</div>
+                    <div class="toast-msg">${escapeHtml(message)}</div>
+                </div>
+                <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                if (toast.parentElement) toast.remove();
+            }, 5000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function requestNotifyPermission() {
+            if (!('Notification' in window)) {
+                appNotify('Notifications', 'Your device does not support web notifications.', 'warning');
+                return;
+            }
+            Notification.requestPermission().then(permission => {
+                notifyPermission = permission;
+                if (permission === 'granted') {
+                    appNotify('Alerts Enabled', 'You will now receive push notifications for all safety alerts.', 'success');
+                    document.getElementById('perm-banner').classList.remove('active');
+                } else {
+                    appNotify('Alerts Disabled', 'Enable notifications from app settings to get background alerts.', 'warning');
+                }
+            });
+        }
+
         // ============== LOGGING ==============
         function logEvent(msg, isAlert = false) {
             const consoleBox = document.getElementById("log-console");
@@ -375,9 +573,9 @@
         function connectMQTT() {
             document.getElementById('connectBtn').disabled = true;
             document.getElementById('connectBtn').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connecting...';
-            
+
             logEvent("Connecting to HiveMQ Cloud Broker...");
-            
+
             try {
                 client = mqtt.connect(MQTT_BROKER, MQTT_OPTIONS);
             } catch (e) {
@@ -389,7 +587,14 @@
             client.on('connect', function () {
                 logEvent("✅ Connected to Cloud MQTT Broker!");
                 updateStatus('mqtt', true);
-                
+
+                // Show permission banner on first successful connect
+                if (notifyPermission === 'default' && 'Notification' in window) {
+                    document.getElementById('perm-banner').classList.add('active');
+                }
+
+                appNotify('Cloud Connected', 'Successfully connected to HiveMQ broker.', 'success');
+
                 Object.values(TOPICS).forEach(topic => {
                     client.subscribe(topic, function (err) {
                         if (err) {
@@ -399,17 +604,17 @@
                         }
                     });
                 });
-                
+
                 document.getElementById('connectBtn').innerHTML = '<i class="fa-solid fa-check"></i> Connected';
                 document.getElementById('connectBtn').style.backgroundColor = 'var(--success-green)';
-                
-                document.getElementById('stream-placeholder').innerHTML = 
+
+                document.getElementById('stream-placeholder').innerHTML =
                     '<i class="fa-solid fa-satellite-dish fa-2xl" style="margin-bottom: 15px;"></i><p>Waiting for ESP32-CAM data...</p>';
             });
 
             client.on('message', function (topic, message) {
                 const payload = message.toString();
-                
+
                 switch(topic) {
                     case TOPICS.CAM_MOTION:
                         handleMotion(payload === 'true');
@@ -437,22 +642,26 @@
             client.on('error', function (err) {
                 logEvent("❌ MQTT Error: " + err.message, true);
                 updateStatus('mqtt', false);
+                appNotify('Connection Error', 'MQTT connection error: ' + err.message, 'danger');
                 console.error('MQTT Error:', err);
             });
 
             client.on('close', function () {
                 logEvent("⚠️ Connection closed.");
                 updateStatus('mqtt', false);
+                appNotify('Disconnected', 'Cloud connection closed. Trying to reconnect...', 'warning');
                 resetConnectButton();
             });
 
             client.on('offline', function () {
                 logEvent("⚠️ MQTT Client went offline.");
                 updateStatus('mqtt', false);
+                appNotify('Offline', 'MQTT client went offline.', 'warning');
             });
 
             client.on('reconnect', function () {
                 logEvent("🔄 Reconnecting to MQTT...");
+                appNotify('Reconnecting', 'Attempting to reconnect to cloud...', 'info');
             });
         }
 
@@ -466,13 +675,14 @@
         function handleMotion(detected) {
             camLastSeen = Date.now();
             updateStatus('cam', true);
-            
+
             const motionBadge = document.getElementById("motion-badge");
             if (detected) {
                 motionCount++;
                 motionBadge.innerHTML = `<i class="fa-solid fa-person-walking"></i> MOTION DETECTED!`;
                 motionBadge.style.background = "var(--danger-red)";
                 logEvent("🚨 MOTION DETECTED by ESP32-CAM!", true);
+                appNotify('🚨 Motion Alert', 'Movement detected by surveillance camera!', 'danger');
             } else {
                 motionBadge.innerHTML = `<i class="fa-solid fa-person-walking"></i> Motion: Clear`;
                 motionBadge.style.background = "rgba(61, 35, 20, 0.75)";
@@ -483,7 +693,7 @@
         function handleFire(detected) {
             camLastSeen = Date.now();
             updateStatus('cam', true);
-            
+
             const fireBadge = document.getElementById("fire-badge");
             if (detected) {
                 fireCount++;
@@ -491,6 +701,7 @@
                 fireBadge.style.background = "var(--danger-red)";
                 logEvent("🔥 FIRE DETECTED by ESP32-CAM!", true);
                 showGlobalBanner("FIRE DETECTED! EVACUATE IMMEDIATELY!");
+                appNotify('🔥 FIRE ALERT', 'Fire detected! Evacuate immediately!', 'danger');
             } else {
                 fireBadge.innerHTML = `<i class="fa-solid fa-fire"></i> Fire: Safe`;
                 fireBadge.style.background = "rgba(61, 35, 20, 0.75)";
@@ -508,59 +719,66 @@
                     document.getElementById("gps-lng").innerText = currentLng.toFixed(6);
                     document.getElementById("gps-fix").innerText = "Locked (" + (data.sats || 0) + " sats)";
                     document.getElementById("gps-fix").style.color = "var(--success-green)";
+
+                    if (!gpsWasLocked) {
+                        appNotify('GPS Locked', `Location acquired: ${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}`, 'success');
+                        gpsWasLocked = true;
+                    }
                 } else {
                     document.getElementById("gps-fix").innerText = "No Fix";
                     document.getElementById("gps-fix").style.color = "var(--warning-amber)";
+                    gpsWasLocked = false;
                 }
             } catch (e) {
                 console.error("GPS parse error:", e);
             }
         }
 
-        // FAST FRAME RENDERING - Optimized for 5 FPS
         function handleFrame(base64Data) {
             camLastSeen = Date.now();
             updateStatus('cam', true);
-            
+
             const img = document.getElementById("video-stream");
             const placeholder = document.getElementById("stream-placeholder");
-            
+
             if (!base64Data || base64Data.length < 100) {
+                console.warn('Received empty or invalid frame data');
                 return;
             }
-            
-            // Direct base64 src - fastest for high FPS
+
             img.src = "data:image/jpeg;base64," + base64Data;
             img.style.display = 'block';
-            placeholder.style.display = 'none';
-            
-            // Calculate FPS
-            const now = Date.now();
-            frameCount++;
-            if (now - lastFrameTime >= 1000) {
-                fps = frameCount;
-                frameCount = 0;
-                lastFrameTime = now;
-                document.getElementById('fps-counter').innerText = fps + ' FPS';
-            }
+            img.onerror = function() {
+                console.error('Failed to decode frame image');
+                img.style.display = 'none';
+                placeholder.style.display = 'flex';
+                placeholder.innerHTML = '<i class="fa-solid fa-triangle-exclamation fa-2xl" style="margin-bottom: 15px;"></i><p>Frame decode error</p>';
+            };
+            img.onload = function() {
+                placeholder.style.display = 'none';
+                frameCount++;
+                if (frameCount % 10 === 0) {
+                    console.log('Frames received:', frameCount);
+                }
+            };
         }
 
         function handleSensors(payload) {
             mainLastSeen = Date.now();
             updateStatus('main', true);
-            
+
             try {
                 const data = JSON.parse(payload);
-                
+
                 document.getElementById("val-methane").innerHTML = (data.methane || 0) + ' <small style="font-size:0.9rem">PPM</small>';
                 document.getElementById("val-co").innerHTML = (data.co || 0) + ' <small style="font-size:0.9rem">PPM</small>';
                 document.getElementById("val-temp").innerHTML = (data.temperature !== undefined ? data.temperature : '--') + ' <small style="font-size:0.9rem">°C</small>';
                 document.getElementById("val-humidity").innerHTML = (data.humidity !== undefined ? data.humidity : '--') + ' <small style="font-size:0.9rem">%</small>';
-                
+
                 const nowStr = new Date().toLocaleTimeString().split(' ')[0];
                 pushChartData(methaneChart, nowStr, data.methane || 0);
                 pushChartData(coChart, nowStr, data.co || 0);
-                
+
                 tempHumChart.data.labels.shift();
                 tempHumChart.data.labels.push(nowStr);
                 tempHumChart.data.datasets[0].data.shift();
@@ -568,16 +786,17 @@
                 tempHumChart.data.datasets[1].data.shift();
                 tempHumChart.data.datasets[1].data.push(data.humidity || 0);
                 tempHumChart.update();
-                
+
                 if (data.danger_alert) {
                     showGlobalBanner("HAZARDOUS GAS OR TEMPERATURE THRESHOLD EXCEEDED!");
                     logEvent("⚠️ HAZARD DETECTED: Gas/Temp threshold exceeded!", true);
+                    appNotify('⚠️ Hazard Alert', 'Hazardous gas or temperature threshold exceeded!', 'danger');
                 }
-                
+
                 if (data.sos_triggered) {
                     handleSOS('ESP32 SOS Button');
                 }
-                
+
             } catch (e) {
                 console.error("Sensor parse error:", e);
             }
@@ -588,15 +807,41 @@
             updateDetectionChart();
             showGlobalBanner(`SOS PANIC BUTTON ACTIVATED! (${source})`);
             logEvent(`🆘 EMERGENCY: ${source} pressed!`, true);
+            appNotify('🆘 SOS EMERGENCY', `Panic button activated from ${source}!`, 'danger');
         }
 
         // ============== UI UPDATES ==============
         function updateStatus(device, online) {
             const dot = document.getElementById(device + '-status-dot');
             const text = document.getElementById(device + '-status-text');
-            
+
             if (!dot || !text) return;
-            
+
+            // Track changes to notify on status transitions
+            const prevStatus = device === 'cam' ? lastCamStatus : (device === 'main' ? lastMainStatus : lastMqttStatus);
+            const newStatus = online;
+
+            if (prevStatus !== null && prevStatus !== newStatus) {
+                if (online) {
+                    appNotify(
+                        device === 'cam' ? 'Camera Online' : (device === 'main' ? 'Main ESP Online' : 'Cloud Online'),
+                        device === 'cam' ? 'ESP32-CAM is now streaming.' : (device === 'main' ? 'Main ESP32 sensor board is connected.' : 'Cloud MQTT broker connection restored.'),
+                        'success'
+                    );
+                } else {
+                    appNotify(
+                        device === 'cam' ? 'Camera Offline' : (device === 'main' ? 'Main ESP Offline' : 'Cloud Offline'),
+                        device === 'cam' ? 'ESP32-CAM stream lost.' : (device === 'main' ? 'Main ESP32 sensor board disconnected.' : 'Cloud MQTT broker connection lost.'),
+                        'warning'
+                    );
+                }
+            }
+
+            // Update stored status
+            if (device === 'cam') lastCamStatus = online;
+            else if (device === 'main') lastMainStatus = online;
+            else if (device === 'mqtt') lastMqttStatus = online;
+
             if (online) {
                 dot.classList.remove('offline', 'connecting');
                 dot.classList.add('online');
@@ -636,7 +881,7 @@
                 handleSOS('Dashboard Manual');
             } else {
                 logEvent("❌ Cannot send SOS - not connected to cloud!", true);
-                alert("Please connect to cloud first!");
+                appNotify('SOS Failed', 'Please connect to cloud first before triggering SOS.', 'warning');
             }
         }
 
