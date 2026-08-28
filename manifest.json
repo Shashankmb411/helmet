@@ -1,0 +1,20 @@
+{
+  "name": "ESP32 Safety Monitor",
+  "short_name": "Safety Monitor",
+  "description": "IoT Safety & Surveillance Dashboard with Firebase Cloud",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#3D2314",
+  "theme_color": "#3D2314",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2964/2964514.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "gcm_sender_id": "913714799421",
+  "gcm_user_visible_only": true
+}

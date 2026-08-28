@@ -1,0 +1,13 @@
+{
+  "appId": "com.yourname.safetymonitor",
+  "appName": "ESP32 Safety Monitor",
+  "webDir": ".",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}
