@@ -486,8 +486,11 @@
         const MQTT_OPTIONS = {
             clientId: 'dashboard-' + Math.random().toString(16).substr(2, 8),
             clean: true,
-            connectTimeout: 8000,
-            reconnectPeriod: 5000,
+            connectTimeout: 10000,
+            reconnectPeriod: 3000,
+            keepalive: 20,
+            resubscribe: true,
+            rejectUnauthorized: false
         };
 
         const TOPICS = {
@@ -882,7 +885,20 @@
         }
 
         // ===================== MQTT FUNCTIONS =====================
+        let mqttReconnectTimer = null;
+        let mqttPingTimer = null;
+
         function connectMQTT() {
+            // Prevent multiple connections
+            if (client && client.connected) {
+                logEvent("MQTT already connected.");
+                return;
+            }
+            if (client && !client.connected) {
+                client.end(true);
+                client = null;
+            }
+
             document.getElementById('connectBtn').disabled = true;
             document.getElementById('connectBtn').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connecting...';
 
@@ -910,6 +926,16 @@
 
                 document.getElementById('connectBtn').innerHTML = '<i class="fa-solid fa-check"></i> MQTT Connected';
                 document.getElementById('connectBtn').style.backgroundColor = 'var(--success-green)';
+
+                // Start manual ping backup (browser throttles background timers, so we force it)
+                if (mqttPingTimer) clearInterval(mqttPingTimer);
+                mqttPingTimer = setInterval(() => {
+                    if (client && client.connected) {
+                        try {
+                            client.publish('dashboard/ping', 'keepalive', { qos: 0, retain: false });
+                        } catch (e) {}
+                    }
+                }, 15000);
             });
 
             client.on('message', function (topic, message) {
@@ -930,10 +956,27 @@
                 appNotify('Connection Error', 'MQTT error: ' + err.message, 'danger');
             });
 
+            client.on('offline', function () {
+                logEvent("⚠️ MQTT went offline.");
+                updateStatus('mqtt', false);
+            });
+
             client.on('close', function () {
-                logEvent("⚠️ MQTT Connection closed.");
+                logEvent("⚠️ MQTT Connection closed. Reconnecting...");
                 updateStatus('mqtt', false);
                 resetConnectButton();
+                // Auto-retry after 3s if not already reconnecting
+                if (!mqttReconnectTimer) {
+                    mqttReconnectTimer = setTimeout(() => {
+                        mqttReconnectTimer = null;
+                        if (!client || !client.connected) connectMQTT();
+                    }, 3000);
+                }
+            });
+
+            client.on('disconnect', function () {
+                logEvent("⚠️ MQTT Disconnected by broker.");
+                updateStatus('mqtt', false);
             });
         }
 
@@ -1108,6 +1151,14 @@
             logEvent("🚀 App loaded. Auto-connecting MQTT...");
             setTimeout(connectMQTT, 1500);
         };
+
+        // Reconnect MQTT when user returns to the app (mobile browsers pause background tabs)
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden && client && !client.connected) {
+                logEvent("🔄 Tab visible again. Reconnecting MQTT...");
+                connectMQTT();
+            }
+        });
     </script>
 </body>
 </html>
