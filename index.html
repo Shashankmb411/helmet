@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3D2314">
     <title>ESP32 IoT Safety Dashboard - Cloud</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
@@ -239,6 +241,7 @@
         .fcm-status { font-size: 0.75rem; color: var(--text-muted); margin-top: 6px; }
         .fcm-status.enabled { color: var(--success-green); }
     </style>
+<base target="_blank">
 </head>
 <body>
 
